@@ -162,6 +162,16 @@ Namespace MyNamespace
 
                         EndCell = 1000
 
+                        Dim blockExtents As Extents3d = mblock.GeometricExtents
+                        Dim blockTotalWidth As Double = blockExtents.MaxPoint.X - blockExtents.MinPoint.X
+                        Dim blockTotalHeight As Double = blockExtents.MaxPoint.Y - blockExtents.MinPoint.Y
+                        Dim cellWidth As Double = blockTotalWidth / 10
+                        Dim cellHeight As Double = cellWidth / 2
+                        ed.WriteMessage(vbLf & $"[DEBUG] Block extents: MinX={blockExtents.MinPoint.X}, MaxX={blockExtents.MaxPoint.X}, MinY={blockExtents.MinPoint.Y}, MaxY={blockExtents.MaxPoint.Y}")
+                        ed.WriteMessage(vbLf & $"[DEBUG] blockTotalWidth={blockTotalWidth}, blockTotalHeight={blockTotalHeight}")
+                        ed.WriteMessage(vbLf & $"[DEBUG] cellWidth={cellWidth}, cellHeight={cellHeight}")
+                        ed.WriteMessage(vbLf & $"[DEBUG] inspt={inspt.X},{inspt.Y}")
+
                         For i = 1 To EndCell
                             Dim ep As ErrorList = New ErrorList()
 
@@ -169,13 +179,15 @@ Namespace MyNamespace
                             ep.errorStrings = ""
 
                             savei = i
-                            Dim currentboundary = GetCurrentMatrixBoundary(inspt, i)
+                            Dim currentboundary = GetCurrentMatrixBoundary(inspt, i, cellWidth, cellHeight)
                             Dim StringValues As List(Of String) = New List(Of String)
                             Dim LayerValues As List(Of String) = New List(Of String)
+                            ed.WriteMessage(vbLf & $"[DEBUG] i={i}, boundary: ({currentboundary(0).X},{currentboundary(0).Y}) to ({currentboundary(2).X},{currentboundary(2).Y})")
                             ZoomToWindow(currentboundary)
                             Dim psop As TypedValue() = New TypedValue() {New TypedValue(CInt(DxfCode.Start), "TEXT,DIMENSION"), New TypedValue(CInt(DxfCode.LayerName), "P_Names,Quantity,Length,Width")}
-                            Dim psr As PromptSelectionResult = ed.SelectCrossingPolygon(currentboundary, New SelectionFilter(psop))
-                            ed.WriteMessage(vbLf & $"psr.Status = {psr.Status}")
+                            Dim boundaryExt As Extents3d = GetViewportBoundaryExtentsInModelSpace(currentboundary)
+                            Dim psr As PromptSelectionResult = ed.SelectCrossingWindow(boundaryExt.MinPoint, boundaryExt.MaxPoint, New SelectionFilter(psop))
+                            ed.WriteMessage(vbLf & $"[DEBUG] psr.Status={psr.Status}, boundaryExt: Min=({boundaryExt.MinPoint.X},{boundaryExt.MinPoint.Y}) Max=({boundaryExt.MaxPoint.X},{boundaryExt.MaxPoint.Y})")
                             If psr.Status <> PromptStatus.OK Then Exit For
                             Dim realLength As Double = 0
                             Dim realWidth As Double = 0
@@ -739,6 +751,16 @@ Namespace MyNamespace
 
                         EndCell = 1000
 
+                        Dim blockExtents As Extents3d = mblock.GeometricExtents
+                        Dim blockTotalWidth As Double = blockExtents.MaxPoint.X - blockExtents.MinPoint.X
+                        Dim blockTotalHeight As Double = blockExtents.MaxPoint.Y - blockExtents.MinPoint.Y
+                        Dim cellWidth As Double = blockTotalWidth / 10
+                        Dim cellHeight As Double = cellWidth / 2
+                        ed.WriteMessage(vbLf & $"[DEBUG] Block extents: MinX={blockExtents.MinPoint.X}, MaxX={blockExtents.MaxPoint.X}, MinY={blockExtents.MinPoint.Y}, MaxY={blockExtents.MaxPoint.Y}")
+                        ed.WriteMessage(vbLf & $"[DEBUG] blockTotalWidth={blockTotalWidth}, blockTotalHeight={blockTotalHeight}")
+                        ed.WriteMessage(vbLf & $"[DEBUG] cellWidth={cellWidth}, cellHeight={cellHeight}")
+                        ed.WriteMessage(vbLf & $"[DEBUG] inspt={inspt.X},{inspt.Y}")
+
                         For i = 1 To EndCell
                             Dim ep As ErrorList = New ErrorList()
 
@@ -746,12 +768,15 @@ Namespace MyNamespace
                             ep.errorStrings = ""
 
                             savei = i
-                            Dim currentboundary = GetCurrentMatrixBoundaryOneRow(inspt, i)
+                            Dim currentboundary = GetCurrentMatrixBoundaryOneRow(inspt, i, cellWidth, cellHeight)
                             Dim StringValues As List(Of String) = New List(Of String)
                             Dim LayerValues As List(Of String) = New List(Of String)
+                            ed.WriteMessage(vbLf & $"[DEBUG] i={i}, boundary: ({currentboundary(0).X},{currentboundary(0).Y}) to ({currentboundary(2).X},{currentboundary(2).Y})")
                             ZoomToWindow(currentboundary)
                             Dim psop As TypedValue() = New TypedValue() {New TypedValue(CInt(DxfCode.Start), "TEXT,DIMENSION"), New TypedValue(CInt(DxfCode.LayerName), "P_Names,Quantity,Length,Width")}
-                            Dim psr As PromptSelectionResult = ed.SelectCrossingPolygon(currentboundary, New SelectionFilter(psop))
+                            Dim boundaryExt As Extents3d = GetViewportBoundaryExtentsInModelSpace(currentboundary)
+                            Dim psr As PromptSelectionResult = ed.SelectCrossingWindow(boundaryExt.MinPoint, boundaryExt.MaxPoint, New SelectionFilter(psop))
+                            ed.WriteMessage(vbLf & $"[DEBUG] psr.Status={psr.Status}, boundaryExt: Min=({boundaryExt.MinPoint.X},{boundaryExt.MinPoint.Y}) Max=({boundaryExt.MaxPoint.X},{boundaryExt.MaxPoint.Y})")
                             If psr.Status <> PromptStatus.OK Then Exit For
                             Dim realLength As Double = 0
                             Dim realWidth As Double = 0
@@ -1233,14 +1258,11 @@ Namespace MyNamespace
         End Function
 
 
-        Public Shared Function GetCurrentMatrixBoundaryOneRow(inspt As Point3d, CurrentPosition As Integer) As Point3dCollection
+        Public Shared Function GetCurrentMatrixBoundaryOneRow(inspt As Point3d, CurrentPosition As Integer, Width As Double, Height As Double) As Point3dCollection
             Dim ReturnValue As Point3dCollection = New Point3dCollection
             Dim colCount As Integer = 1000
             Dim column As Integer = (CurrentPosition - 1) Mod colCount
             Dim row As Integer = (CurrentPosition - 1) \ colCount
-
-            Dim Width As Double = 10000
-            Dim Height As Double = 5000
 
             Dim LeftX As Double = inspt.X + Width * column
             Dim BottomY As Double = inspt.Y - Height * row
@@ -1257,14 +1279,11 @@ Namespace MyNamespace
         End Function
 
 
-        Public Shared Function GetCurrentMatrixBoundary(inspt As Point3d, CurrentPosition As Integer) As Point3dCollection
+        Public Shared Function GetCurrentMatrixBoundary(inspt As Point3d, CurrentPosition As Integer, Width As Double, Height As Double) As Point3dCollection
             Dim ReturnValue As Point3dCollection = New Point3dCollection
             Dim colCount As Integer = 10
             Dim column As Integer = (CurrentPosition - 1) Mod colCount
             Dim row As Integer = (CurrentPosition - 1) \ colCount
-
-            Dim Width As Double = 10000
-            Dim Height As Double = 5000
 
             Dim LeftX As Double = inspt.X + Width * column
             Dim BottomY As Double = inspt.Y - Height * row
