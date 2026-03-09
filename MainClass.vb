@@ -4,7 +4,6 @@ Imports Autodesk.AutoCAD.EditorInput
 Imports Autodesk.AutoCAD.Geometry
 Imports Autodesk.AutoCAD.Runtime
 Imports System.IO
-Imports System.Threading
 
 Namespace MyNamespace
 
@@ -93,8 +92,6 @@ Namespace MyNamespace
                 Return
             End If
 
-            'End While
-            'End If
             Using trans As Transaction = doc.TransactionManager.StartTransaction()
                 Try
                     Dim writelineflag As Boolean
@@ -142,7 +139,6 @@ Namespace MyNamespace
 
                         Dim blockExtents As Extents3d = mblock.GeometricExtents
                         Dim blockTotalWidth As Double = blockExtents.MaxPoint.X - blockExtents.MinPoint.X
-                        Dim blockTotalHeight As Double = blockExtents.MaxPoint.Y - blockExtents.MinPoint.Y
                         Dim cellWidth As Double = blockTotalWidth / 10
                         Dim cellHeight As Double = cellWidth / 2
 
@@ -217,27 +213,18 @@ Namespace MyNamespace
                                         StringValues.Add(ObjValue)
 
                                 End Select
-
-                                'dbobj.Dispose()
                             Next
                             If LayerValues.Contains("P_Names") = False Then
-                                'LayersMissing &= "'P_Names' "
                                 LayerValues.Add("P_Names")
                                 StringValues.Add("")
                                 ep.errorMissingPanelName = True
                                 AppendError(ep, "missing panel")
-
-                                'Exit For
                             ElseIf LayerValues.Contains("Quantity") = False Then
-                                'LayersMissing &= "'Quantity' "
                                 LayerValues.Add("Quantity")
                                 StringValues.Add("")
                                 ep.errorQuantity = True
                                 AppendError(ep, "missing quantity")
-
                             End If
-                            'Exit For
-                            'End If
                             Dim NameValue As String = ""
                             Dim QuantityValue As String = ""
                             Dim WidthValue As String = ""
@@ -313,8 +300,6 @@ Namespace MyNamespace
                                 ep.errorPanelDuplicate = True
                                 AppendError(ep, "duplicate name")
                                 duplicateLayouts.Add(NameValue)
-                                'Throw New Exception(ErrorStatus.AlreadyInGroup, $"Layout {NameValue} already exists!")
-                                'Return
                                 Dim layoutSuffix As Integer = 1
                                 While LayoutList.Contains(NameValue)
                                     While LayoutList.Contains(NameValue & "(" & layoutSuffix & ")")
@@ -346,12 +331,9 @@ Namespace MyNamespace
                             End If
 
                             epList.Add(ep)
-                            'End If
 
                             ZoomToWindow(currentboundary)
                             Dim psr2 As PromptSelectionResult = ed.SelectWindowPolygon(currentboundary)
-
-                            'MinimumEnclosingBoundary(psr)
 
                             If psr2.Status <> PromptStatus.OK Then trans.Abort()
 
@@ -402,7 +384,6 @@ Namespace MyNamespace
                                 logWriter.WriteLine(ep.errorStrings)
                             End If
                         Next
-                        'MessageBox.Show($"{errorStringList}", "Error")
                         If errorStringList = "" Then
                             logWriter.WriteLine("No errors found.")
                         End If
@@ -415,102 +396,11 @@ Namespace MyNamespace
                     trans.Dispose()
                 Catch ex As Exception
                     MsgBox(vbLf & "Error encountered : " & ex.Message)
-                    'Writer.Close()
                     trans.Abort()
                 End Try
             End Using
 
         End Sub
-
-        Public Shared Function GetDataInsideBoundary222(currentboundary As Point3dCollection) As BoundaryResult
-            Dim result As New List(Of Point3d)
-            Dim bResult As New BoundaryResult
-            bResult.moreThanOne = False
-            bResult.closedError = False
-
-            ' Get the current document and editor
-            Dim doc As Document = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument
-            Dim db As Database = doc.Database
-            Dim ed As Editor = doc.Editor
-
-            Using tr As Transaction = db.TransactionManager.StartTransaction()
-                Try
-                    ' Open the BlockTable for read
-                    Dim bt As BlockTable = tr.GetObject(db.BlockTableId, OpenMode.ForRead)
-                    ' Open the BlockTableRecord ModelSpace for read
-                    Dim btr As BlockTableRecord = tr.GetObject(bt(BlockTableRecord.ModelSpace), OpenMode.ForRead)
-
-                    ' Select all entities within the current boundary (window selection)
-                    Dim selRes As PromptSelectionResult = ed.SelectWindowPolygon(currentboundary)
-                    If selRes.Status <> PromptStatus.OK Then
-                        Throw New Exception("No entities found inside the boundary.")
-                    End If
-
-                    ' Get the selection set
-                    Dim selSet As SelectionSet = selRes.Value
-                    Dim polylineCount As Integer = 0
-
-                    ' Iterate over the selection set and process each entity
-                    For Each selObj As SelectedObject In selSet
-                        If selObj IsNot Nothing Then
-                            Dim ent As Entity = CType(tr.GetObject(selObj.ObjectId, OpenMode.ForRead), Entity)
-
-                            ' Process Polyline entities
-                            If TypeOf ent Is Polyline Then
-                                Dim poly As Polyline = CType(ent, Polyline)
-                                polylineCount += 1
-                                For i As Integer = 0 To poly.NumberOfVertices - 1
-                                    Dim vertex As Point3d = poly.GetPoint3dAt(i)
-                                    If IsPointInsideBoundary(vertex, currentboundary) Then
-                                        result.Add(vertex)
-                                    End If
-                                Next
-                                If Not poly.Closed Then
-                                    bResult.closedError = True
-                                End If
-                            End If
-                        End If
-                    Next
-
-                    If polylineCount > 1 Then
-                        bResult.moreThanOne = True
-                    End If
-
-                    ' Commit the transaction
-                    tr.Commit()
-
-                Catch ex As Exception
-                    ed.WriteMessage(vbCrLf & ex.Message)
-                    tr.Abort()
-                End Try
-            End Using
-
-            ' Assign the list of points inside the boundary to the BoundaryResult object
-            bResult.PointsInside = result
-            Return bResult
-        End Function
-
-
-        Public Shared Function GetCurrentMatrixBoundaryOneRow(inspt As Point3d, CurrentPosition As Integer, Width As Double, Height As Double) As Point3dCollection
-            Dim ReturnValue As Point3dCollection = New Point3dCollection
-            Dim colCount As Integer = 1000
-            Dim column As Integer = (CurrentPosition - 1) Mod colCount
-            Dim row As Integer = (CurrentPosition - 1) \ colCount
-
-            Dim LeftX As Double = inspt.X + Width * column
-            Dim BottomY As Double = inspt.Y - Height * row
-
-            Dim RightX As Double = LeftX + Width
-            Dim TopY As Double = BottomY - Height
-
-            ReturnValue.Add(New Point3d(LeftX, BottomY, 0))
-            ReturnValue.Add(New Point3d(LeftX, TopY, 0))
-            ReturnValue.Add(New Point3d(RightX, TopY, 0))
-            ReturnValue.Add(New Point3d(RightX, BottomY, 0))
-
-            Return ReturnValue
-        End Function
-
 
         Public Shared Function GetCurrentMatrixBoundary(inspt As Point3d, CurrentPosition As Integer, Width As Double, Height As Double) As Point3dCollection
             Dim ReturnValue As Point3dCollection = New Point3dCollection
@@ -738,9 +628,6 @@ Namespace MyNamespace
                     Dim selRes As PromptSelectionResult = ed.SelectWindowPolygon(currentboundary, filter)
                     If selRes.Status <> PromptStatus.OK Then
                         Throw New Exception(ErrorStatus.SubSelectionSetEmpty, $"No entities found on the 'Corners' layer.")
-                        'ed.WriteMessage("No entities found on the 'Corners' layer.")
-                        'tr.Abort()
-                        'Return result
                     End If
 
                     ' Get the selection set
@@ -892,12 +779,6 @@ Namespace MyNamespace
                     ' Collect the points for each selected entity
                     Dim entPts As Point3dCollection = CollectPoints(tr, ent)
                     For Each pt As Point3d In entPts
-                        '  Create a DBPoint, for testing purposes
-                        ' DBPoint dbp = new DBPoint(pt);
-                        ' btr.AppendEntity(dbp);
-                        ' tr.AddNewlyCreatedDBObject(dbp, true);
-                        ' 
-
                         pts.Add(pt)
                     Next
                     ' Create a boundary for each entity (if so chosen) or
@@ -954,11 +835,6 @@ Namespace MyNamespace
                     ' Collect the points for each selected entity
                     Dim entPts As Point3dCollection = CollectPoints(tr, ent)
                     For Each pt As Point3d In entPts
-                        '  Create a DBPoint, for testing purposes
-                        ' DBPoint dbp = new DBPoint(pt);
-                        ' btr.AppendEntity(dbp);
-                        ' tr.AddNewlyCreatedDBObject(dbp, true);
-                        ' 
                         pts.Add(pt)
                     Next
                     ' Create a boundary for each entity (if so chosen) or
@@ -1084,7 +960,6 @@ Namespace MyNamespace
 
             Dim acadApp = Autodesk.AutoCAD.ApplicationServices.Application.AcadApplication
             acadApp.ZoomWindow(p1, p2)
-            'Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument.Editor.Regen()
         End Sub
 
         Private Shared Function GetViewportBoundaryExtentsInModelSpace(ByVal points As Point3dCollection) As Extents3d
@@ -1195,12 +1070,10 @@ Namespace MyNamespace
             Dim db As Database = doc.Database
             Dim blockpath As String
             Dim ObjId As ObjectId = New ObjectId
-            'Dim blockName As String = "TEST"
 
             Try
                 blockpath = HostApplicationServices.Current.FindFile(blockName & Convert.ToString(".dwg"), db, FindFileHint.[Default])
             Catch ex As Exception
-                'MessageBox.Show(ex.Message)
                 Return ObjectId.Null
             End Try
 
@@ -1223,23 +1096,6 @@ Namespace MyNamespace
             blkDb.Dispose()
 
             Return ObjId
-        End Function
-
-        Private Shared Sub WaitFOrBlockEditorToCLose()
-            Do While IsBlockEditorActive()
-                Thread.Sleep(500)
-            Loop
-        End Sub
-
-        Private Shared Function IsBlockEditorActive() As Boolean
-            Dim beInt As Integer
-            beInt = CType(Autodesk.AutoCAD.ApplicationServices.Application.GetSystemVariable("BLOCKEDITOR"), Integer)
-            If beInt = 1 Then
-                Return True
-            Else
-                Return False
-            End If
-
         End Function
 
         Public Shared Function IsClosedPart(points As List(Of Point3d)) As Boolean
@@ -1270,11 +1126,6 @@ Namespace MyNamespace
         Public Property PointsInside As List(Of Point3d)
         Public Property moreThanOne As Boolean
         Public Property closedError As Boolean
-
-        'Public Sub New(pointsInside As List(Of Point3d), moreThanOne As Boolean)
-        '    Me.PointsInside = pointsInside
-        '    Me.moreThanOne = moreThanOne
-        'End Sub
     End Class
 
     Public Class ErrorList
