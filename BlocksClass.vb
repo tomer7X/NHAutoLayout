@@ -32,8 +32,6 @@ Namespace MyNamespace
 
             db = Application.DocumentManager.MdiActiveDocument.Database
 
-            'InsertBlock = False
-
             Using acLckDocCur As DocumentLock = doc.LockDocument
                 Using trans As Transaction = db.TransactionManager.StartTransaction()
                     ' Open the Block table for read
@@ -133,16 +131,13 @@ Namespace MyNamespace
                             Dim attRef As AttributeReference = TryCast(obj, AttributeReference)
 
                             For i = 0 To aTag.Count - 1
-
                                 If attRef.Tag = aTag(i) Then
                                     attRef.TextString = aValue(i)
-                                    ed.WriteMessage(vbLf & "Attribute " & attRef.Tag & " in " & blk.BlockName & " has been modified.")
                                 End If
                             Next
                         Next
                     End If
 
-                    'Next
                     trans.Commit()
 
                 Catch ex As Exception
@@ -178,9 +173,7 @@ Namespace MyNamespace
                         Next
                     End If
 
-                    'Next
                     trans.Commit()
-                    trans.Dispose()
 
                 Catch ex As Exception
                     ed.WriteMessage("Error encountered : " & ex.Message)
@@ -190,105 +183,19 @@ Namespace MyNamespace
             Return TagResult
         End Function
 
-        Public Sub SetBlockAttributesOld(blkname As String, aTag As List(Of String), aValue As List(Of String), Optional tabName As String = "", Optional SetGlobal As Boolean = False)
-            Dim doc As Document = Application.DocumentManager.MdiActiveDocument
-            Dim db As Database = doc.Database
-            Dim ed As Editor = doc.Editor
-            If tabName = "" Then
-                tabName = LayoutManager.Current.CurrentLayout
-            End If
-
-            Using trans As Transaction = doc.TransactionManager.StartTransaction()
-                Try
-                    Dim tv As TypedValue()
-                    If SetGlobal = False Then
-                        tv = New TypedValue(2) {}
-                        tv.SetValue(New TypedValue(CInt(DxfCode.Start), "INSERT"), 0)
-                        tv.SetValue(New TypedValue(CInt(DxfCode.HasSubentities), 1), 1)
-                        tv.SetValue(New TypedValue(CInt(DxfCode.LayoutName), tabName), 2)
-                    Else
-                        tv = New TypedValue(1) {}
-                        tv.SetValue(New TypedValue(CInt(DxfCode.Start), "INSERT"), 0)
-                        tv.SetValue(New TypedValue(CInt(DxfCode.HasSubentities), 1), 1)
-                    End If
-
-                    Dim filter As New SelectionFilter(tv)
-                    Dim ssPrompt As PromptSelectionResult = ed.SelectAll(filter)
-                    Dim ss As SelectionSet = ssPrompt.Value
-                    Dim iModCtr As Integer
-                    Dim iCtr As Integer
-                    Dim sAtt As String
-                    Dim sBlk As String
-
-                    If ssPrompt.Status = PromptStatus.OK Then
-                        Dim blks = ss.GetObjectIds()
-                        For Each sObj As ObjectId In blks
-                            Dim blk As BlockReference = TryCast(trans.GetObject(sObj, OpenMode.ForRead), BlockReference)
-
-                            If blk.BlockName = blkname Then
-                                For Each attRefID As ObjectId In blk.AttributeCollection
-                                    Dim obj As DBObject = trans.GetObject(attRefID, OpenMode.ForWrite)
-                                    Dim attRef As AttributeReference = TryCast(obj, AttributeReference)
-
-                                    For i = 0 To aTag.Count - 1
-
-                                        If attRef.Tag = aTag(i) Then
-                                            attRef.TextString = aValue(i)
-                                            iModCtr += 1
-                                            ed.WriteMessage(vbLf & "Attribute " & attRef.Tag & " in " & blk.BlockName & " has been modified.")
-                                        End If
-                                    Next
-                                    iCtr += 1
-                                Next
-                            End If
-
-                        Next
-                        trans.Commit()
-
-                        If iCtr > 1 Or 0 Then
-                            sAtt = " attributes "
-                        Else
-                            sAtt = " attribute "
-                        End If
-
-                        If ss.Count > 1 Or 0 Then
-                            sBlk = " blocks "
-                        Else
-                            sBlk = " block "
-                        End If
-
-                        ed.WriteMessage(vbLf & iModCtr.ToString & " of " & iCtr.ToString & sAtt & "in " & ss.Count.ToString & sBlk & "modified.")
-                    Else
-                        ed.WriteMessage("No object selected.")
-                    End If
-
-                Catch ex As Exception
-                    ed.WriteMessage("Error encountered : " & ex.Message)
-                    trans.Abort()
-                End Try
-            End Using
-        End Sub
-
-        Public Shared Sub InsertBlockFromFile(FileName As String, BlockName As String) ' This method can have any name
+        Public Shared Sub InsertBlockFromFile(FileName As String, BlockName As String)
             Dim doc As Document = Application.DocumentManager.MdiActiveDocument
             Using acLckDocCur As DocumentLock = doc.LockDocument
                 Using OpenDb As Database = New Database(False, True)
                     OpenDb.ReadDwgFile(FileName, FileShare.ReadWrite, True, "")
                     Dim ids As ObjectIdCollection = New ObjectIdCollection()
                     Using tr As Transaction = OpenDb.TransactionManager.StartTransaction()
-
-                        'For example, Get the block by name "TEST"
-
                         Dim bt As BlockTable
                         bt = CType(tr.GetObject(OpenDb.BlockTableId, OpenMode.ForRead), BlockTable)
                         If bt.Has(BlockName) Then
                             ids.Add(bt(BlockName))
                         End If
-
                         tr.Commit()
-                        'if found, add the block
-                        'get the current drawing database
-
                     End Using
 
                     If ids.Count > 0 Then

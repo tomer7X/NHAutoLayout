@@ -36,9 +36,6 @@ Namespace MyNamespace
             Dim DrawingName As String = Left(db.Filename, Len(db.Filename) - 4)
             Dim csvFile As String = $"{DrawingName}.csv"
             Dim logFile As String = $"{DrawingName}_log.txt"
-            Dim duplicateLayouts As List(Of String) = New List(Of String)
-            Dim duplicateCorners As List(Of String) = New List(Of String)
-            Dim quantityNull As List(Of String) = New List(Of String)
             Dim tbViewport As String = "VIEWMODEL"
             Dim tbInsertionPoint As Point3d = New Point3d(4.75, 4.65, 0)
             Dim cornersLayer As String = "Corners"
@@ -57,7 +54,6 @@ Namespace MyNamespace
 
             Dim LayoutList As List(Of String) = LayoutsClass.GetLayoutList()
 
-            Dim cornersFlag As Boolean = False
             vals = New TypedValue() {New TypedValue(CInt(DxfCode.Start), "*LINE")}
             Dim clo As PromptSelectionOptions = New PromptSelectionOptions
             clo.MessageForAdding = $"{vbLf}Select object to be assigned as 'Corners' : "
@@ -65,17 +61,14 @@ Namespace MyNamespace
             clo.SinglePickInSpace = True
             Dim clr As PromptSelectionResult
 
-            While cornersFlag = False
+            Do
                 clr = ed.GetSelection(clo, New SelectionFilter(vals))
                 If clr.Status = PromptStatus.Cancel Then Return
                 If clr.Status <> PromptStatus.OK Then
                     ed.WriteMessage($"{vbLf}Missed pick. Try again.")
-                Else
-                    cornersFlag = True
                 End If
-            End While
+            Loop Until clr.Status = PromptStatus.OK
 
-            'delete all layouts?
             Dim PKO As PromptKeywordOptions = New PromptKeywordOptions($"{vbLf}Delete all layouts? [Yes/No] ", "Yes No")
             PKO.Keywords.Default = "Yes"
             Dim KeywordResult = ed.GetKeywords(PKO)
@@ -110,11 +103,8 @@ Namespace MyNamespace
                     End If
                     Dim Writer As New System.IO.StreamWriter(csvFile, True)
 
-                    'if flag is true it's mean that we want to add more lines, pages must start from the last one
-
                     If writelineflag = False Then Writer.WriteLine(header)
 
-                    'check the titleblock if it has a polygon in the layer "VIEWMODEL" and use that geometry as a viewport
                     Dim viewportPolyline As Polyline = BlocksClass.GetPolylineInBlock(blkname, tbViewport)
 
                     If viewportPolyline IsNot Nothing Then
@@ -125,7 +115,7 @@ Namespace MyNamespace
                         VPWidth = extents.MaxPoint.X - extents.MinPoint.X
                     End If
 
-                    Dim missingPName As Integer = "1"
+                    Dim missingPName As Integer = 1
                     Dim epList As List(Of ErrorList) = New List(Of ErrorList)
 
                     For Each ent As ObjectId In clr.Value.GetObjectIds()
@@ -141,6 +131,7 @@ Namespace MyNamespace
                         Dim blockTotalWidth As Double = blockExtents.MaxPoint.X - blockExtents.MinPoint.X
                         Dim cellWidth As Double = blockTotalWidth / 10
                         Dim cellHeight As Double = cellWidth / 2
+                        Dim psop As TypedValue() = New TypedValue() {New TypedValue(CInt(DxfCode.Start), "TEXT,DIMENSION"), New TypedValue(CInt(DxfCode.LayerName), "P_Names,Quantity,Length,Width")}
 
                         For i = 1 To 1000
                             Dim ep As ErrorList = New ErrorList()
@@ -152,7 +143,6 @@ Namespace MyNamespace
                             Dim StringValues As List(Of String) = New List(Of String)
                             Dim LayerValues As List(Of String) = New List(Of String)
                             ZoomToWindow(currentboundary)
-                            Dim psop As TypedValue() = New TypedValue() {New TypedValue(CInt(DxfCode.Start), "TEXT,DIMENSION"), New TypedValue(CInt(DxfCode.LayerName), "P_Names,Quantity,Length,Width")}
                             Dim boundaryExt As Extents3d = GetViewportBoundaryExtentsInModelSpace(currentboundary)
                             Dim psr As PromptSelectionResult = ed.SelectCrossingWindow(boundaryExt.MinPoint, boundaryExt.MaxPoint, New SelectionFilter(psop))
                             If psr.Status <> PromptStatus.OK Then Exit For
@@ -299,7 +289,6 @@ Namespace MyNamespace
                             If LayoutList.Contains(NameValue) Then
                                 ep.errorPanelDuplicate = True
                                 AppendError(ep, "duplicate name")
-                                duplicateLayouts.Add(NameValue)
                                 Dim layoutSuffix As Integer = 1
                                 While LayoutList.Contains(NameValue)
                                     While LayoutList.Contains(NameValue & "(" & layoutSuffix & ")")
@@ -323,11 +312,6 @@ Namespace MyNamespace
                             If bResult.moreThanOne = True Then
                                 ep.errorDuplicateCorner = True
                                 AppendError(ep, "duplicate corner")
-                                duplicateCorners.Add(NameValue)
-                            End If
-
-                            If quantityError = True Then
-                                quantityNull.Add(NameValue)
                             End If
 
                             epList.Add(ep)
@@ -393,7 +377,6 @@ Namespace MyNamespace
 
                     ed.WriteMessage($"{vbLf}{LayoutCount.ToString} layout{If(LayoutCount = 1, "", "s")} created.")
                     trans.Commit()
-                    trans.Dispose()
                 Catch ex As Exception
                     MsgBox(vbLf & "Error encountered : " & ex.Message)
                     trans.Abort()
@@ -422,59 +405,11 @@ Namespace MyNamespace
             Return ReturnValue
         End Function
 
-        Public Function Compute2DCentroid(Points As Point2dCollection) As Point2d
-            Dim centroid As Point2d = New Point2d(0, 0)
-            Dim signedArea As Double = 0
-            Dim x0 As Double = 0
-            Dim y0 As Double = 0
-            Dim x1 As Double = 0
-            Dim y1 As Double = 0
-            Dim a As Double = 0
-            Dim idx As Integer = 0
-
-            While idx < Points.Count - 1
-                x0 = Points(idx).X
-                y0 = Points(idx).Y
-                x1 = Points(idx + 1).X
-                y1 = Points(idx + 1).Y
-                a = x0 * y1 - x1 * y0
-                signedArea += a
-                centroid = New Point2d(centroid.X + (x0 + x1) * a, centroid.Y + (y0 + y1) * a)
-                idx += 1
-            End While
-
-            x0 = Points(idx).X
-            y0 = Points(idx).Y
-            x1 = Points(0).X
-            y1 = Points(0).Y
-            a = x0 * y1 - x1 * y0
-            signedArea += a
-            centroid = New Point2d(centroid.X + (x0 + x1) * a, centroid.Y + (y0 + y1) * a)
-
-            signedArea *= 0.5
-            centroid = New Point2d(centroid.X / (6 * signedArea), centroid.Y / (6 * signedArea))
-
-            Return centroid
-        End Function
-
         Public Shared Sub ExtractBounds(ByVal txt As DBText, ByVal pts As Point3dCollection)
-            ' We have a special approach for DBText and
-            ' AttributeReference objects, as we want to get
-            ' all four corners of the bounding box, even
-            ' when the text or the containing block reference
-            ' is rotated
             If txt.Bounds.HasValue AndAlso txt.Visible Then
-                ' Create a straight version of the text object
-                ' and copy across all the relevant properties
-                ' (stopped copying AlignmentPoint, as it would
-                ' sometimes cause an eNotApplicable error)
-                ' We'll create the text at the WCS origin
-                ' with no rotation, so it's easier to use its
-                ' extents
                 Dim txt2 As DBText = New DBText()
                 txt2.Normal = Vector3d.ZAxis
                 txt2.Position = Point3d.Origin
-                ' Other properties are copied from the original
                 txt2.TextString = txt.TextString
                 txt2.TextStyleId = txt.TextStyleId
                 txt2.LineWeight = txt.LineWeight
@@ -486,18 +421,10 @@ Namespace MyNamespace
                 txt2.IsMirroredInX = txt2.IsMirroredInX
                 txt2.IsMirroredInY = txt2.IsMirroredInY
                 txt2.Oblique = txt.Oblique
-                ' Get its bounds if it has them defined
-                ' (which it should, as the original did)
                 If txt2.Bounds.HasValue Then
                     Dim maxPt As Point3d = txt2.Bounds.Value.MaxPoint
-                    ' Place all four corners of the bounding box
-                    ' in an array
                     Dim bounds As Point2d() = New Point2d() {Point2d.Origin, New Point2d(0.0, maxPt.Y), New Point2d(maxPt.X, maxPt.Y), New Point2d(maxPt.X, 0.0)}
-                    ' We're going to get each point's WCS coordinates
-                    ' using the plane the text is on
                     Dim pl As Plane = New Plane(txt.Position, txt.Normal)
-                    ' Rotate each point and add its WCS location to the
-                    ' collection
                     For Each pt As Point2d In bounds
                         pts.Add(pl.EvaluatePoint(pt.RotateBy(txt.Rotation, Point2d.Origin)))
                     Next
@@ -506,16 +433,7 @@ Namespace MyNamespace
         End Sub
 
         Public Shared Function CollectPoints(tr As Transaction, ent As Entity) As Point3dCollection
-
-            ' The collection of points to populate and return
             Dim pts As Point3dCollection = New Point3dCollection()
-            ' We'll start by checking a block reference for
-            ' attributes, getting their bounds and adding
-            ' them to the point list. We'll still explode
-            ' the BlockReference later, to gather points
-            ' from other geometry, it's just that approach
-            ' doesn't work for attributes (we only get the
-            ' AttributeDefinitions, which don't have bounds)
             Dim br As BlockReference = TryCast(ent, BlockReference)
             If br IsNot Nothing Then
                 For Each arId As ObjectId In br.AttributeCollection
@@ -526,13 +444,8 @@ Namespace MyNamespace
                     End If
                 Next
             End If
-            ' If we have a curve - other than a polyline, which
-            ' we will want to explode - we'll get points along
-            ' its length
             Dim cur As Curve = TryCast(ent, Curve)
             If cur IsNot Nothing AndAlso Not (TypeOf cur Is Polyline OrElse TypeOf cur Is Polyline2d OrElse TypeOf cur Is Polyline3d) Then
-                ' Two points are enough for a line, we'll go with
-                ' a higher number for other curves
                 Dim segs = If(TypeOf ent Is Line, 2, 20)
                 Dim param As Double = cur.EndParam - cur.StartParam
                 For i = 0 To segs - 1
@@ -543,17 +456,10 @@ Namespace MyNamespace
                     End Try
                 Next
             ElseIf TypeOf ent Is DBPoint Then
-                ' Points are easy
                 pts.Add(CType(ent, DBPoint).Position)
             ElseIf TypeOf ent Is DBText Then
-                ' For DBText we use the same approach as
-                ' for AttributeReferences
                 ExtractBounds(CType(ent, DBText), pts)
             ElseIf TypeOf ent Is MText Then
-                ' MText is also easy - you get all four corners
-                ' returned by a function. That said, the points
-                ' are of the MText's box, so may well be different
-                ' from the bounds of the actual contents
                 Dim txt As MText = CType(ent, MText)
                 Dim pts2 As Point3dCollection = txt.GetBoundingPoints()
                 For Each pt As Point3d In pts2
@@ -576,8 +482,6 @@ Namespace MyNamespace
                 Catch
                 End Try
             Else
-                ' Here's where we attempt to explode other types
-                ' of object
                 Dim oc As Autodesk.AutoCAD.DatabaseServices.DBObjectCollection = New Autodesk.AutoCAD.DatabaseServices.DBObjectCollection()
                 Try
                     ent.Explode(oc)
@@ -604,43 +508,30 @@ Namespace MyNamespace
             Dim result As New List(Of Point3d)
             Dim lineResult As New List(Of Point3d)
             Dim bResult As New BoundaryResult
-            bResult.moreThanOne = False
-            bResult.closedError = False
 
-            ' Get the current document and editor
             Dim doc As Document = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument
             Dim db As Database = doc.Database
             Dim ed As Editor = doc.Editor
 
             Using tr As Transaction = db.TransactionManager.StartTransaction()
                 Try
-                    ' Open the BlockTable for read
-                    Dim bt As BlockTable = tr.GetObject(db.BlockTableId, OpenMode.ForRead)
-                    ' Open the BlockTableRecord ModelSpace for read
-                    Dim btr As BlockTableRecord = tr.GetObject(bt(BlockTableRecord.ModelSpace), OpenMode.ForRead)
-
-                    ' Create a filter to select only entities on the cornersLayer layer
                     Dim filter As New SelectionFilter(New TypedValue() {
-            New TypedValue(DxfCode.LayerName, cornersLayer)
-        })
+                        New TypedValue(DxfCode.LayerName, cornersLayer)
+                    })
 
-                    ' Select all entities on the cornersLayer layer
                     Dim selRes As PromptSelectionResult = ed.SelectWindowPolygon(currentboundary, filter)
                     If selRes.Status <> PromptStatus.OK Then
                         Throw New Exception(ErrorStatus.SubSelectionSetEmpty, $"No entities found on the 'Corners' layer.")
                     End If
 
-                    ' Get the selection set
                     Dim selSet As SelectionSet = selRes.Value
                     Dim polylineCount As Integer = 0
                     Dim lineCount As Integer = 0
 
-                    ' Iterate over the selection set and process each entity
                     For Each selObj As SelectedObject In selSet
                         If selObj IsNot Nothing Then
                             Dim ent As Entity = CType(tr.GetObject(selObj.ObjectId, OpenMode.ForRead), Entity)
 
-                            ' Process Polyline entities
                             If TypeOf ent Is Polyline Then
                                 Dim poly As Polyline = CType(ent, Polyline)
                                 polylineCount += 1
@@ -653,8 +544,6 @@ Namespace MyNamespace
                                 If poly.Closed = False Then
                                     bResult.closedError = True
                                 End If
-
-                                ' Process Line entities
                             ElseIf TypeOf ent Is Line Then
                                 lineCount += 1
                                 Dim line As Line = CType(ent, Line)
@@ -682,7 +571,6 @@ Namespace MyNamespace
                         bResult.moreThanOne = True
                     End If
 
-                    ' Commit the transaction
                     tr.Commit()
 
                 Catch ex As Exception
@@ -697,24 +585,17 @@ Namespace MyNamespace
 
         Private Shared Function IsPointInsideBoundary(point As Point3d, boundary As Point3dCollection) As Boolean
             Dim inside As Boolean = False
+            Dim n As Integer = boundary.Count
+            Dim j As Integer = n - 1
 
-            ' Convert the Point3dCollection to a Polyline
-            Dim polyline As New Polyline()
-            For i As Integer = 0 To boundary.Count - 1
-                polyline.AddVertexAt(i, New Point2d(boundary(i).X, boundary(i).Y), 0, 0, 0)
-            Next
-            polyline.Closed = True
+            For i As Integer = 0 To n - 1
+                Dim xi As Double = boundary(i).X
+                Dim yi As Double = boundary(i).Y
+                Dim xj As Double = boundary(j).X
+                Dim yj As Double = boundary(j).Y
 
-            ' Ray-casting algorithm to determine if the point is inside the polyline
-            Dim numPoints As Integer = polyline.NumberOfVertices
-            Dim j As Integer = numPoints - 1
-
-            For i As Integer = 0 To numPoints - 1
-                Dim vertex1 As Point2d = polyline.GetPoint2dAt(i)
-                Dim vertex2 As Point2d = polyline.GetPoint2dAt(j)
-
-                If (vertex1.Y > point.Y) <> (vertex2.Y > point.Y) AndAlso
-           (point.X < (vertex2.X - vertex1.X) * (point.Y - vertex1.Y) / (vertex2.Y - vertex1.Y) + vertex1.X) Then
+                If (yi > point.Y) <> (yj > point.Y) AndAlso
+                   (point.X < (xj - xi) * (point.Y - yi) / (yj - yi) + xi) Then
                     inside = Not inside
                 End If
 
@@ -728,29 +609,8 @@ Namespace MyNamespace
             Dim doc As Document = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument
             Dim db As Database = doc.Database
             Dim ed As Editor = doc.Editor
-            ' Ask user to select entities
-            'Dim pso As PromptSelectionOptions = New PromptSelectionOptions()
-            'pso.MessageForAdding = vbLf & "Select objects to enclose: "
-            'pso.AllowDuplicates = False
-            'pso.AllowSubSelections = True
-            'pso.RejectObjectsFromNonCurrentSpace = True
-            'pso.RejectObjectsOnLockedLayers = False
-            'Dim psr As PromptSelectionResult = ed.GetSelection(pso)
             If psr.Status <> PromptStatus.OK Then Return
             Dim oneBoundPerEnt = False
-            'If psr.Value.Count > 1 Then
-            '    Dim pko As PromptKeywordOptions = New PromptKeywordOptions(vbLf & "Multiple objects selected: create " & "individual boundaries around each one?")
-            '    pko.AllowNone = True
-            '    pko.Keywords.Add("Yes")
-            '    pko.Keywords.Add("No")
-            '    pko.Keywords.[Default] = "No"
-            '    Dim pkr As PromptResult = ed.GetKeywords(pko)
-            '    If pkr.Status <> PromptStatus.OK Then Return
-            '    oneBoundPerEnt = pkr.StringResult Is "Yes"
-            'End If
-
-            ' There may be a SysVar defining the buffer
-            ' to add to our radius
 
             Dim buffer = 0.0
             Try
@@ -767,22 +627,17 @@ Namespace MyNamespace
                 End If
             End Try
 
-            ' Get the current UCS
             Dim ucs As CoordinateSystem3d = ed.CurrentUserCoordinateSystem.CoordinateSystem3d
-            ' Collect points on the component entities
             Dim pts As Point3dCollection = New Point3dCollection()
             Dim tr As Transaction = db.TransactionManager.StartTransaction()
             Using tr
                 Dim btr As BlockTableRecord = CType(tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite), BlockTableRecord)
                 For i As Integer = 0 To psr.Value.Count - 1
                     Dim ent As Entity = CType(tr.GetObject(psr.Value(i).ObjectId, OpenMode.ForRead), Entity)
-                    ' Collect the points for each selected entity
                     Dim entPts As Point3dCollection = CollectPoints(tr, ent)
                     For Each pt As Point3d In entPts
                         pts.Add(pt)
                     Next
-                    ' Create a boundary for each entity (if so chosen) or
-                    ' just once after collecting all the points
                     If oneBoundPerEnt OrElse i = psr.Value.Count - 1 Then
                         Try
                             Dim bnd As Entity = RectangleFromPoints(pts, ucs, buffer)
@@ -803,10 +658,6 @@ Namespace MyNamespace
             Dim doc As Document = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument
             Dim db As Database = doc.Database
             Dim ed As Editor = doc.Editor
-            ' Ask user to select entities
-
-            ' There may be a SysVar defining the buffer
-            ' to add to our radius
 
             Dim buffer = 0.0
             Try
@@ -823,22 +674,17 @@ Namespace MyNamespace
                 End If
             End Try
 
-            ' Get the current UCS
             Dim ucs As CoordinateSystem3d = ed.CurrentUserCoordinateSystem.CoordinateSystem3d
-            ' Collect points on the component entities
             Dim pts As Point3dCollection = New Point3dCollection()
             Dim tr As Transaction = db.TransactionManager.StartTransaction()
             Using tr
                 Dim btr As BlockTableRecord = CType(tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite), BlockTableRecord)
                 For i As Integer = 0 To psr.Value.Count - 1
                     Dim ent As Entity = CType(tr.GetObject(psr.Value(i).ObjectId, OpenMode.ForRead), Entity)
-                    ' Collect the points for each selected entity
                     Dim entPts As Point3dCollection = CollectPoints(tr, ent)
                     For Each pt As Point3d In entPts
                         pts.Add(pt)
                     Next
-                    ' Create a boundary for each entity (if so chosen) or
-                    ' just once after collecting all the points
                     If i = psr.Value.Count - 1 Then
                         Try
                             p = TotalBoundingBox(pts, ucs, buffer)
@@ -854,21 +700,13 @@ Namespace MyNamespace
         End Function
 
         Public Shared Function RectangleFromPoints(ByVal pts As Point3dCollection, ByVal ucs As CoordinateSystem3d, ByVal buffer As Double) As Entity
-            ' Get the plane of the UCS
             Dim pl As Plane = New Plane(ucs.Origin, ucs.Zaxis)
-            ' We will project these (possibly 3D) points onto
-            ' the plane of the current UCS, as that's where
-            ' we will create our circle
-            ' Project the points onto it
             Dim pts2d As List(Of Point2d) = New List(Of Point2d)(pts.Count)
             For i As Integer = 0 To pts.Count - 1
                 pts2d.Add(pl.ParameterOf(pts(i)))
             Next
-            ' Assuming we have some points in our list...
             If pts.Count > 0 Then
-                ' Set the initial min and max values from the first entry
                 Dim minX As Double = pts2d(0).X, maxX = minX, minY As Double = pts2d(0).Y, maxY = minY
-                ' Perform a single iteration to extract the min/max X and Y
                 For i = 1 To pts2d.Count - 1
                     Dim pt As Point2d = pts2d(i)
                     If pt.X < minX Then minX = pt.X
@@ -876,21 +714,12 @@ Namespace MyNamespace
                     If pt.Y < minY Then minY = pt.Y
                     If pt.Y > maxY Then maxY = pt.Y
                 Next
-                ' Our final buffer amount will be the percentage of the
-                ' smallest of the dimensions
-
                 Dim buf = Math.Min(maxX - minX, maxY - minY) * buffer
-                ' Apply the buffer to our point ordinates
-
                 minX -= buf
                 minY -= buf
                 maxX += buf
                 maxY += buf
-
-                ' Create the boundary points
-
                 Dim pt0 As Point2d = New Point2d(minX, minY), pt1 As Point2d = New Point2d(minX, maxY), pt2 As Point2d = New Point2d(maxX, maxY), pt3 As Point2d = New Point2d(maxX, minY)
-                ' Finally we create the polyline
                 Dim p = New Polyline(4)
                 p.Normal = pl.Normal
                 p.AddVertexAt(0, pt0, 0, 0, 0)
@@ -904,22 +733,14 @@ Namespace MyNamespace
         End Function
 
         Private Shared Function TotalBoundingBox(ByVal pts As Point3dCollection, ByVal ucs As CoordinateSystem3d, ByVal buffer As Double) As Point3dCollection
-            ' Get the plane of the UCS
             Dim p As Point3dCollection = New Point3dCollection
             Dim pl As Plane = New Plane(ucs.Origin, ucs.Zaxis)
-            ' We will project these (possibly 3D) points onto
-            ' the plane of the current UCS, as that's where
-            ' we will create our circle
-            ' Project the points onto it
             Dim pts2d As List(Of Point2d) = New List(Of Point2d)(pts.Count)
             For i As Integer = 0 To pts.Count - 1
                 pts2d.Add(pl.ParameterOf(pts(i)))
             Next
-            ' Assuming we have some points in our list...
             If pts.Count > 0 Then
-                ' Set the initial min and max values from the first entry
                 Dim minX As Double = pts2d(0).X, maxX = minX, minY As Double = pts2d(0).Y, maxY = minY
-                ' Perform a single iteration to extract the min/max X and Y
                 For i = 1 To pts2d.Count - 1
                     Dim pt As Point2d = pts2d(i)
                     If pt.X < minX Then minX = pt.X
@@ -927,26 +748,15 @@ Namespace MyNamespace
                     If pt.Y < minY Then minY = pt.Y
                     If pt.Y > maxY Then maxY = pt.Y
                 Next
-                ' Our final buffer amount will be the percentage of the
-                ' smallest of the dimensions
-
                 Dim buf = Math.Min(maxX - minX, maxY - minY) * buffer
-                ' Apply the buffer to our point ordinates
-
                 minX -= buf
                 minY -= buf
                 maxX += buf
                 maxY += buf
-
-                ' Create the boundary points
-
-                Dim pt0 As Point3d = New Point3d(minX, minY, 0), pt1 As Point3d = New Point3d(minX, maxY, 0), pt2 As Point3d = New Point3d(maxX, maxY, 0), pt3 As Point3d = New Point3d(maxX, minY, 0)
-                ' Finally we create the points
-                p.Add(pt0)
-                p.Add(pt1)
-                p.Add(pt2)
-                p.Add(pt3)
-
+                p.Add(New Point3d(minX, minY, 0))
+                p.Add(New Point3d(minX, maxY, 0))
+                p.Add(New Point3d(maxX, maxY, 0))
+                p.Add(New Point3d(maxX, minY, 0))
                 Return p
             End If
             Return Nothing
@@ -971,40 +781,6 @@ Namespace MyNamespace
             Return ext
         End Function
 
-
-        Private Function GetCentroid(ByVal pl As Polyline) As Point3d
-            Dim p0 As Point2d = pl.GetPoint2dAt(0)
-            Dim cen As Point2d = New Point2d(0.0, 0.0)
-            Dim area = 0.0
-            Dim last As Integer = pl.NumberOfVertices - 1
-            Dim tmpArea As Double
-            Dim tmpPoint As Point2d
-
-            If pl.GetSegmentType(0) = SegmentType.Arc Then
-                Dim datas = GetArcGeom(pl, pl.GetBulgeAt(0), 0, 1)
-                area = datas(0)
-                cen = New Point2d(datas(1), datas(2)) * datas(0)
-            End If
-            For i = 1 To last - 1
-                tmpArea = TriangleAlgebricArea(p0, pl.GetPoint2dAt(i), pl.GetPoint2dAt(i + 1))
-                tmpPoint = TriangleCentroid(p0, pl.GetPoint2dAt(i), pl.GetPoint2dAt(i + 1))
-                cen += (tmpPoint * tmpArea).GetAsVector()
-                area += tmpArea
-                If pl.GetSegmentType(i) = SegmentType.Arc Then
-                    Dim datas = GetArcGeom(pl, pl.GetBulgeAt(i), i, i + 1)
-                    area += datas(0)
-                    cen += New Vector2d(datas(1), datas(2)) * datas(0)
-                End If
-            Next
-            If pl.GetSegmentType(last) = SegmentType.Arc Then
-                Dim datas = GetArcGeom(pl, pl.GetBulgeAt(last), last, 0)
-                area += datas(0)
-                cen += New Vector2d(datas(1), datas(2)) * datas(0)
-            End If
-            cen = cen.DivideBy(area)
-            Dim result As Point3d = New Point3d(cen.X, cen.Y, pl.Elevation)
-            Return result.TransformBy(Matrix3d.PlaneToWorld(pl.Normal))
-        End Function
 
         Private Shared Function GetCentroidfromPoints(pts As Point3dCollection) As Point3d
             Dim point2ds As Point2dCollection = New Point2dCollection
