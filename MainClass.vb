@@ -9,6 +9,16 @@ Imports System.Threading
 Namespace MyNamespace
 
     Public Class MainClass
+
+        Private Shared Sub AppendError(ep As ErrorList, msg As String)
+            If ep.errorStrings <> "" Then
+                ep.errorStrings &= ", "
+            Else
+                ep.errorStrings = $"Error on matrix no.{ep.errorIndex}: "
+            End If
+            ep.errorStrings &= msg
+        End Sub
+
         <CommandMethod("NHAutoLayout")>
         Public Shared Sub MatrixToLayout()
             Const VPCenterX As Double = 210.6893
@@ -16,21 +26,15 @@ Namespace MyNamespace
             Const VPCenterZ As Double = 0
             Dim VPHeight As Double = 234
             Dim VPWidth As Double = 396
-            Dim savei As Integer = 0
-            Dim LayersMissing As String = ""
             Dim VPCenter As Point3d = New Point3d(VPCenterX, VPCenterY, VPCenterZ)
             Dim LayoutCount As Integer = 0
             Dim PageNumber As Integer = 0
             Dim BlocksList As List(Of String) = BlocksClass.GetBlockNames
-            Dim VerifyFlag As Boolean = True
             Dim blkname As String = "TH-Template"
             Dim doc As Document = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument
             Dim db As Database = doc.Database
             Dim ed As Editor = doc.Editor
-            Dim LISPPath As String
-            Dim LISPName As String = "PAGENUMBERS"
             Dim DrawingName As String = Left(db.Filename, Len(db.Filename) - 4)
-            Dim DrawingPath As String = $"{Path.GetDirectoryName(db.Filename)}\"
             Dim csvFile As String = $"{DrawingName}.csv"
             Dim logFile As String = $"{DrawingName}_log.txt"
             Dim duplicateLayouts As List(Of String) = New List(Of String)
@@ -40,24 +44,9 @@ Namespace MyNamespace
             Dim tbInsertionPoint As Point3d = New Point3d(4.75, 4.65, 0)
             Dim cornersLayer As String = "Corners"
 
-            Try
-                LISPPath = HostApplicationServices.Current.FindFile(LISPName & Convert.ToString(".lsp"), db, FindFileHint.[Default])
-                LISPPath = LISPPath.Replace("\", "/")
-            Catch ex As Exception
-                'MessageBox.Show(ex.Message)  
-            End Try
-
-            Dim FileName = "TH-Template.dwg"
-
             If BlocksList.Contains(blkname) = False Then
                 ReplaceBlock(blkname)
             End If
-            'ReplaceBlock(blkname)
-
-            'If SecurityClass.IsAllowed() = False Then
-            '    MessageBox.Show("You are not allowed to use the utility.")
-            '    Return
-            'End If
 
             Dim vals As TypedValue() = New TypedValue() {New TypedValue(CInt(DxfCode.Start), "INSERT")}
             Dim pso As PromptSelectionOptions = New PromptSelectionOptions
@@ -68,10 +57,6 @@ Namespace MyNamespace
             If res.Status <> PromptStatus.OK Then Return
 
             Dim LayoutList As List(Of String) = LayoutsClass.GetLayoutList()
-            Dim EndCell As Integer
-
-
-
 
             Dim cornersFlag As Boolean = False
             vals = New TypedValue() {New TypedValue(CInt(DxfCode.Start), "*LINE")}
@@ -104,7 +89,7 @@ Namespace MyNamespace
             BlocksList = BlocksClass.GetBlockNames
 
             If BlocksList.Contains(blkname) = False Then
-                Autodesk.AutoCAD.ApplicationServices.Application.ShowAlertDialog($"File ""{FileName}"" not found.{vbLf}Aborting.")
+                Autodesk.AutoCAD.ApplicationServices.Application.ShowAlertDialog($"File ""{blkname}.dwg"" not found.{vbLf}Aborting.")
                 Return
             End If
 
@@ -153,14 +138,7 @@ Namespace MyNamespace
 
                     For Each id As ObjectId In res.Value.GetObjectIds()
                         Dim mblock As BlockReference = CType(trans.GetObject(id, OpenMode.ForRead), BlockReference)
-                        'Dim x = mblock.DynamicBlockTableRecord.GetObject(OpenMode.ForRead)
-                        Dim bname As String = mblock.Name
                         Dim inspt As Point3d = mblock.Position
-
-
-
-
-                        EndCell = 1000
 
                         Dim blockExtents As Extents3d = mblock.GeometricExtents
                         Dim blockTotalWidth As Double = blockExtents.MaxPoint.X - blockExtents.MinPoint.X
@@ -168,13 +146,12 @@ Namespace MyNamespace
                         Dim cellWidth As Double = blockTotalWidth / 10
                         Dim cellHeight As Double = cellWidth / 2
 
-                        For i = 1 To EndCell
+                        For i = 1 To 1000
                             Dim ep As ErrorList = New ErrorList()
 
                             ep.errorIndex = LayoutCount + 1
                             ep.errorStrings = ""
 
-                            savei = i
                             Dim currentboundary = GetCurrentMatrixBoundary(inspt, i, cellWidth, cellHeight)
                             Dim StringValues As List(Of String) = New List(Of String)
                             Dim LayerValues As List(Of String) = New List(Of String)
@@ -192,14 +169,7 @@ Namespace MyNamespace
 
                             If bResult.closedError = True Then
                                 ep.errorClosed = True
-
-                                If ep.errorStrings <> "" Then
-                                    ep.errorStrings = ep.errorStrings & ", "
-                                Else
-                                    ep.errorStrings = $"Error on matrix no.{ep.errorIndex.ToString}: "
-                                End If
-
-                                ep.errorStrings = $"{ep.errorStrings}not closed"
+                                AppendError(ep, "not closed")
                             End If
 
                             If verticesInsideBoundary.Count > 0 Then
@@ -221,8 +191,6 @@ Namespace MyNamespace
                             Dim ids = psr.Value.GetObjectIds()
                             For Each id1 In ids
                                 Dim dbobj As DBObject = trans.GetObject(id1, OpenMode.ForRead)
-                                'Dim str As String = obj.GetType().Name
-                                'Dim dbText = TryCast(obj, DBText)
 
                                 Select Case dbobj.GetType()
 
@@ -231,12 +199,8 @@ Namespace MyNamespace
                                         Dim ObjString As String = Text.TextString
                                         Dim LayerName As String = Text.Layer
 
-
-
                                         LayerValues.Add(LayerName)
                                         StringValues.Add(ObjString)
-                                        'ed.WriteMessage(vbLf & i.ToString & " " & ObjString & " " & LayerName)
-                                        'Dim textEntity As New netDxf.Entities.Text(ObjString, New Vector2(0, 0), 12)
 
 
                                         If LayerName = "P_Names" And LayerValues.Contains(ObjString) Then
@@ -261,14 +225,7 @@ Namespace MyNamespace
                                 LayerValues.Add("P_Names")
                                 StringValues.Add("")
                                 ep.errorMissingPanelName = True
-
-                                If ep.errorStrings <> "" Then
-                                    ep.errorStrings = ep.errorStrings & ", "
-                                Else
-                                    ep.errorStrings = $"Error on matrix no.{ep.errorIndex.ToString}: "
-                                End If
-
-                                ep.errorStrings = $"{ep.errorStrings}missing panel"
+                                AppendError(ep, "missing panel")
 
                                 'Exit For
                             ElseIf LayerValues.Contains("Quantity") = False Then
@@ -276,14 +233,7 @@ Namespace MyNamespace
                                 LayerValues.Add("Quantity")
                                 StringValues.Add("")
                                 ep.errorQuantity = True
-
-                                If ep.errorStrings <> "" Then
-                                    ep.errorStrings = ep.errorStrings & ", "
-                                Else
-                                    ep.errorStrings = $"Error on matrix no.{ep.errorIndex.ToString}: "
-                                End If
-
-                                ep.errorStrings = $"{ep.errorStrings}missing quantity"
+                                AppendError(ep, "missing quantity")
 
                             End If
                             'Exit For
@@ -293,7 +243,6 @@ Namespace MyNamespace
                             Dim WidthValue As String = ""
                             Dim LengthValue As String = ""
                             Dim quantityError As Boolean = False
-                            Dim nameError As Boolean = False
 
                             For j = 0 To LayerValues.Count - 1
                                 Select Case LayerValues(j)
@@ -302,7 +251,6 @@ Namespace MyNamespace
                                         If NameValue = "" Then
                                             NameValue = $"Panel{missingPName.ToString} "
                                             missingPName += 1
-                                            nameError = True
                                         End If
                                         StringValues.RemoveAt(0)
                                     Case "Quantity"
@@ -317,26 +265,14 @@ Namespace MyNamespace
                                         WidthValue = realWidth.ToString()
                                         If WidthValue <> StringValues(0) Then
                                             ep.errorWidth = True
-                                            If ep.errorStrings <> "" Then
-                                                ep.errorStrings = ep.errorStrings & ", "
-                                            Else
-                                                ep.errorStrings = $"Error on matrix no.{ep.errorIndex.ToString}: "
-                                            End If
-
-                                            ep.errorStrings = $"{ep.errorStrings}error in width"
+                                            AppendError(ep, "error in width")
                                         End If
                                         StringValues.RemoveAt(0)
                                     Case "Length"
                                         LengthValue = realLength.ToString()
                                         If LengthValue <> StringValues(0) Then
                                             ep.errorLength = True
-                                            If ep.errorStrings <> "" Then
-                                                ep.errorStrings = ep.errorStrings & ", "
-                                            Else
-                                                ep.errorStrings = $"Error on matrix no.{ep.errorIndex.ToString}: "
-                                            End If
-
-                                            ep.errorStrings = $"{ep.errorStrings}error in length"
+                                            AppendError(ep, "error in length")
                                         End If
                                         StringValues.RemoveAt(0)
                                 End Select
@@ -344,25 +280,13 @@ Namespace MyNamespace
                             If WidthValue = "" Then
                                 WidthValue = realWidth.ToString()
                                 ep.errorWidth = True
-                                If ep.errorStrings <> "" Then
-                                    ep.errorStrings = ep.errorStrings & ", "
-                                Else
-                                    ep.errorStrings = $"Error on matrix no.{ep.errorIndex.ToString}: "
-                                End If
-
-                                ep.errorStrings = $"{ep.errorStrings}missing width dimension"
+                                AppendError(ep, "missing width dimension")
                             End If
 
                             If LengthValue = "" Then
                                 LengthValue = realLength.ToString()
                                 ep.errorWidth = True
-                                If ep.errorStrings <> "" Then
-                                    ep.errorStrings = ep.errorStrings & ", "
-                                Else
-                                    ep.errorStrings = $"Error on matrix no.{ep.errorIndex.ToString}: "
-                                End If
-
-                                ep.errorStrings = $"{ep.errorStrings}missing length dimension"
+                                AppendError(ep, "missing length dimension")
                             End If
                             Dim AttributeTags As List(Of String) = New List(Of String)
                             Dim AttributeValues As List(Of String) = New List(Of String)
@@ -387,13 +311,7 @@ Namespace MyNamespace
                             LayoutList = LayoutsClass.GetLayoutList()
                             If LayoutList.Contains(NameValue) Then
                                 ep.errorPanelDuplicate = True
-                                If ep.errorStrings <> "" Then
-                                    ep.errorStrings = ep.errorStrings & ", "
-                                Else
-                                    ep.errorStrings = $"Error on matrix no.{ep.errorIndex.ToString}: "
-                                End If
-
-                                ep.errorStrings = $"{ep.errorStrings}duplicate name"
+                                AppendError(ep, "duplicate name")
                                 duplicateLayouts.Add(NameValue)
                                 'Throw New Exception(ErrorStatus.AlreadyInGroup, $"Layout {NameValue} already exists!")
                                 'Return
@@ -408,14 +326,7 @@ Namespace MyNamespace
                                 For k = 0 To epList.Count - 1
                                     If epList(k).errorPanelDuplicate = False AndAlso epList(k).panelName = NameValue.Substring(0, epList(k).panelName.Length) Then
                                         epList(k).errorPanelDuplicate = True
-
-                                        If epList(k).errorStrings <> "" Then
-                                            epList(k).errorStrings = epList(k).errorStrings & ", "
-                                        Else
-                                            epList(k).errorStrings = $"Error on matrix no.{epList(k).errorIndex.ToString}: "
-                                        End If
-
-                                        epList(k).errorStrings = $"{epList(k).errorStrings}duplicate name"
+                                        AppendError(epList(k), "duplicate name")
                                         Exit For
 
                                     End If
@@ -426,13 +337,7 @@ Namespace MyNamespace
 
                             If bResult.moreThanOne = True Then
                                 ep.errorDuplicateCorner = True
-                                If ep.errorStrings <> "" Then
-                                    ep.errorStrings = ep.errorStrings & ", "
-                                Else
-                                    ep.errorStrings = $"Error on matrix no.{ep.errorIndex.ToString}: "
-                                End If
-
-                                ep.errorStrings = $"{ep.errorStrings}duplicate corner"
+                                AppendError(ep, "duplicate corner")
                                 duplicateCorners.Add(NameValue)
                             End If
 
@@ -466,16 +371,7 @@ Namespace MyNamespace
                             Dim TitleBlock As ObjectId = BlocksClass.InsertBlock(blkname, tbInsertionPoint, True, NameValue)
 
                             BlocksClass.SetBlockAttributes(TitleBlock, AttributeTags, AttributeValues, NameValue)
-                            'AvailableAttributes = BlocksClass.CheckBlockAttributes(TitleBlock, AttributeTags)
-
-                            'For Each tag As String In AvailableAttributes
-                            '    If AttributeTags.Contains(tag) Then
-                            '        AttributeTags.Remove(tag)
-                            '    End If
-                            'Next
-                            'MessageBox.Show("1")
                             LayoutManager.Current.CurrentLayout = NameValue
-                            'MessageBox.Show("2")
 
                             LayoutsClass.SetPageSetupToLayout()
                             If VPHeight / ViewHeight < VPWidth / ViewWidth Then
@@ -486,9 +382,6 @@ Namespace MyNamespace
                             LayoutManager.Current.CurrentLayout = "Model"
                             LayoutCount += 1
 
-                            'If LengthValue <> 5 And WidthValue <> 5 Then
-                            '    Console.WriteLine("need to make 5 into the real dim")
-                            'End If
                             Writer.WriteLine($"{PageNumber},{NameValue},{LengthValue},{WidthValue},{QuantityValue}")
                         Next
                     Next
@@ -517,24 +410,7 @@ Namespace MyNamespace
                         Process.Start("notepad.exe", logFile)
                     End If
 
-
-
-                    If LayersMissing <> "" Then
-                        Throw New Exception(ErrorStatus.LayerGroupCodeMissing, "Error! " & LayoutCount & " layouts created, #" & savei & " rectangle missing the layers: " & LayersMissing)
-
-                    End If
-
-
-
-                    If LISPPath <> "" Then
-                        doc.SendStringToExecute($"(load ""{LISPPath}"")(c:reo)(princ){vbLf}", True, False, False)
-                    End If
-
-
-                    doc.SendStringToExecute($"(command ""._BEDIT"" ""{blkname}"")(princ){vbLf}", True, False, False)
-                    'WaitFOrBlockEditorToCLose()
                     ed.WriteMessage($"{vbLf}{LayoutCount.ToString} layout{If(LayoutCount = 1, "", "s")} created.")
-                    'AutoPDF()
                     trans.Commit()
                     trans.Dispose()
                 Catch ex As Exception
