@@ -10,27 +10,18 @@ Namespace MyNamespace
         Public Shared Function GetLayoutList() As List(Of String)
             Dim dwgLayouts As New List(Of String)
             Try
-
                 Dim doc As Document = Core.Application.DocumentManager.MdiActiveDocument
                 Dim db As Database = doc.Database
-                Dim ed As Editor = doc.Editor
 
                 Dim layAndTab As SortedDictionary(Of Integer, String) = New SortedDictionary(Of Integer, String)
 
                 Using tr As Transaction = db.TransactionManager.StartTransaction()
-                    Dim lm As LayoutManager = LayoutManager.Current
-
                     Dim layoutDic As DBDictionary = TryCast(tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead, False), DBDictionary)
 
                     For Each entry As DBDictionaryEntry In layoutDic
                         Dim layoutid As ObjectId = entry.Value
                         Dim layout As Layout = TryCast(tr.GetObject(layoutid, OpenMode.ForRead), Layout)
-
-                        'If layout.TabOrder > 0 Then
                         layAndTab.Add(layout.TabOrder, layout.LayoutName)
-                        'dwgLayouts.Add(layout.LayoutName)
-
-                        'End If
                     Next
                     tr.Commit()
                 End Using
@@ -50,27 +41,18 @@ Namespace MyNamespace
         Public Shared Function GetLayouts() As List(Of Layout)
             Dim dwgLayouts As New List(Of Layout)
             Try
-
                 Dim doc As Document = Core.Application.DocumentManager.MdiActiveDocument
                 Dim db As Database = doc.Database
-                Dim ed As Editor = doc.Editor
 
                 Dim layAndTab As SortedDictionary(Of Integer, Layout) = New SortedDictionary(Of Integer, Layout)
 
                 Using tr As Transaction = db.TransactionManager.StartTransaction()
-                    Dim lm As LayoutManager = LayoutManager.Current
-
                     Dim layoutDic As DBDictionary = TryCast(tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead, False), DBDictionary)
 
                     For Each entry As DBDictionaryEntry In layoutDic
                         Dim layoutid As ObjectId = entry.Value
                         Dim layout As Layout = TryCast(tr.GetObject(layoutid, OpenMode.ForRead), Layout)
-
-                        'If layout.TabOrder > 0 Then
                         layAndTab.Add(layout.TabOrder, layout)
-                        'dwgLayouts.Add(layout.LayoutName)
-
-                        'End If
                     Next
                     tr.Commit()
                 End Using
@@ -90,7 +72,6 @@ Namespace MyNamespace
         End Function
 
         Public Shared Sub SetCurrentLayoutTab(tab As String)
-            Dim doc = Core.Application.DocumentManager.MdiActiveDocument
             LayoutManager.Current.CurrentLayout = tab
         End Sub
 
@@ -145,7 +126,6 @@ Namespace MyNamespace
             Dim doc As Document = Core.Application.DocumentManager.MdiActiveDocument
             Dim db As Database = doc.Database
             Dim ed As Editor = doc.Editor
-            'Dim tabName As String = LayoutManager.Current.CurrentLayout
             Using trans As Transaction = doc.TransactionManager.StartTransaction()
                 Try
                     Dim tv As TypedValue()
@@ -186,8 +166,6 @@ Namespace MyNamespace
 
             Dim idCol As ObjectIdCollection = New ObjectIdCollection
 
-
-
             If LayerName = "" Then
                 LayerName = "Defpoints"
             End If
@@ -214,12 +192,9 @@ Namespace MyNamespace
                 Dim vp As Viewport = New Viewport()
                 vp.Layer = LayerName
                 vp.SetDatabaseDefaults()
-                vp.CenterPoint = _ 'New Point3d(125, 217.75, 0)
-                CenterPoint
-                vp.Width = _ '200
-                Width
-                vp.Height = _ '128.5
-                Height
+                vp.CenterPoint = CenterPoint
+                vp.Width = Width
+                vp.Height = Height
                 vp.ViewCenter = ViewCenter
                 vp.ViewHeight = Height / Scale
                 vp.FreezeLayersInViewport(idCol.GetEnumerator)
@@ -229,21 +204,16 @@ Namespace MyNamespace
 
                 vp.On = True
 
-                'Change the value of the next line if you want it locked
-                vp.Locked = False
-
                 trans.Commit()
 
             End Using
 
         End Sub
         Public Shared Sub CreateOrEditPageSetup()
-            ' Get the current document and database, and start a transaction
             Dim doc As Document = Core.Application.DocumentManager.MdiActiveDocument
             Dim db As Database = doc.Database
             Dim ed As Editor = doc.Editor
 
-            'Using doc.LockDocument
             Using trans As Transaction = db.TransactionManager.StartTransaction()
 
                 Dim plSets As DBDictionary =
@@ -254,20 +224,15 @@ Namespace MyNamespace
                 Dim plSet As PlotSettings
                 Dim createNew As Boolean = False
 
-                ' Reference the Layout Manager
                 Dim acLayoutMgr As LayoutManager = LayoutManager.Current
 
-                ' Get the current layout and output its name in the Command Line window
                 Dim acLayout As Layout =
                 trans.GetObject(acLayoutMgr.GetLayoutId(acLayoutMgr.CurrentLayout),
                                   OpenMode.ForRead)
 
-                ' Check to see if the page setup exists
                 If plSets.Contains("TH_A3 PDF") = False Then
                     createNew = True
 
-                    ' Create a new PlotSettings object: 
-                    '    True - model space, False - named layout
                     plSet = New PlotSettings(acLayout.ModelType)
                     plSet.CopyFrom(acLayout)
 
@@ -276,158 +241,96 @@ Namespace MyNamespace
                     trans.AddNewlyCreatedDBObject(plSet, True)
                 Else
                     plSet = plSets.GetAt("TH_A3 PDF").GetObject(OpenMode.ForWrite)
-                    'Return
                 End If
 
-                ' Update the PlotSettings object
                 Try
                     Dim acPlSetVdr As PlotSettingsValidator = PlotSettingsValidator.Current
-                    ' Set the Plotter and page size
+
                     acPlSetVdr.SetPlotConfigurationName(plSet,
                                                         "DWG To PDF.pc3",
                                                         "ISO_full_bleed_A3_(420.00_x_297.00_MM)")
 
-                    ' Set to plot to the current display
-                    'If acLayout.ModelType = False Then
                     acPlSetVdr.SetPlotType(plSet,
                                            Autodesk.AutoCAD.DatabaseServices.PlotType.Extents)
-                    'Else
-                    'acPlSetVdr.SetPlotType(plSet, Autodesk.AutoCAD.DatabaseServices.PlotType.Layout)
 
-                    'End If
-
-
-
-                    ' Use SetPlotWindowArea with PlotType.Window
-                    'acPlSetVdr.SetPlotWindowArea(plSet,
-                    '                             New Extents2d(New Point2d(0.0, 0.0),
-                    '                             New Point2d(420.0, 297.0)))
-
-                    ' Use SetPlotViewName with PlotType.View
-                    'acPlSetVdr.SetPlotViewName(plSet, "MyView")
-
-                    ' Set the plot offset
                     acPlSetVdr.SetPlotCentered(plSet, True)
-
                     acPlSetVdr.SetPlotOrigin(plSet, New Point2d(0, 0))
 
-
-                    ' Set the plot scale
                     acPlSetVdr.SetUseStandardScale(plSet, True)
                     acPlSetVdr.SetPlotPaperUnits(plSet, PlotPaperUnit.Millimeters)
                     acPlSetVdr.SetStdScaleType(plSet, StdScaleType.ScaleToFit)
                     plSet.ScaleLineweights = False
 
-                    ' Specify if plot styles should be displayed on the layout
                     plSet.ShowPlotStyles = True
 
-                    ' Rebuild plotter, plot style, and canonical media lists 
-                    ' (must be called before setting the plot style)
                     acPlSetVdr.RefreshLists(plSet)
 
-
-                    ' Specify the shaded viewport options
                     plSet.ShadePlot = PlotSettingsShadePlotType.AsDisplayed
-
                     plSet.ShadePlotResLevel = ShadePlotResLevel.Normal
 
-                    ' Specify the plot options
                     plSet.PrintLineweights = True
                     plSet.PlotTransparency = False
                     plSet.PlotPlotStyles = True
                     plSet.DrawViewportsFirst = True
 
-                    ' Use only on named layouts - Hide paperspace objects option
-                    ' plSet.PlotHidden = True
-
-                    ' Specify the plot orientation
                     acPlSetVdr.SetPlotRotation(plSet, PlotRotation.Degrees000)
 
-                    ' Set the plot style
                     If db.PlotStyleMode = True Then
                         acPlSetVdr.SetCurrentStyleSheet(plSet, "monochrome.ctb")
                     Else
                         acPlSetVdr.SetCurrentStyleSheet(plSet, "monochrome.stb")
                     End If
 
-                    ' Zoom to show the whole paper
                     acPlSetVdr.SetZoomToPaperOnUpdate(plSet, True)
 
-
-                    'acLayout.CopyFrom(plSet)
                 Catch es As Autodesk.AutoCAD.Runtime.Exception
-                    'MsgBox(es.Message)
                     ed.WriteMessage("Error encountered : " & es.Message)
-                    'trans.Abort()
                 End Try
 
-                ' Save the changes made
-                'plSet.UpgradeOpen()
-                'plSet.Dispose()
-                'plSets.Dispose()
-                'vStyles.Dispose()
                 trans.Commit()
-                'trans.Dispose()
                 If createNew = True Then
                     plSet.Dispose()
                 End If
             End Using
-            'End Using
         End Sub
 
         Public Shared Sub AssignPageSetupToLayout()
-            ' Get the current document and database, and start a transaction
             Dim doc As Document = Core.Application.DocumentManager.MdiActiveDocument
             Dim db As Database = doc.Database
 
-            'Using doc.LockDocument
             Using trans As Transaction = db.TransactionManager.StartTransaction()
-                ' Reference the Layout Manager
                 Dim lm As LayoutManager = LayoutManager.Current
 
-                ' Get the current layout and output its name in the Command Line window
                 Dim acLayout As Layout =
                         trans.GetObject(lm.GetLayoutId(lm.CurrentLayout),
-                                          OpenMode.ForRead)
+                                           OpenMode.ForRead)
 
                 Dim acPlSet As DBDictionary =
                         trans.GetObject(db.PlotSettingsDictionaryId, OpenMode.ForRead)
 
-                ' Check to see if the page setup exists
                 If acPlSet.Contains("TH_A3 PDF") = True Then
                     Dim plSet As PlotSettings =
                             acPlSet.GetAt("TH_A3 PDF").GetObject(OpenMode.ForRead)
 
-                    ' Update the layout
                     trans.GetObject(lm.GetLayoutId(lm.CurrentLayout), OpenMode.ForWrite)
                     acLayout.CopyFrom(plSet)
 
-                    ' Save the new objects to the database
                     trans.Commit()
                 Else
-                    ' Ignore the changes made
                     trans.Abort()
                 End If
             End Using
 
-            'End Using
-
-            ' Update the display
             doc.Editor.Regen()
         End Sub
 
         Public Shared Sub SetPageSetupToLayout()
-            ' Get the current document and database, and start a transaction
             Dim doc As Document = Core.Application.DocumentManager.MdiActiveDocument
             Dim db As Database = doc.Database
 
-            'Using doc.LockDocument
-
             Using trans As Transaction = db.TransactionManager.StartTransaction()
-                ' Reference the Layout Manager
                 Dim lm As LayoutManager = LayoutManager.Current
 
-                ' Get the current layout and output its name in the Command Line window
                 Dim acLayout As Layout =
                     trans.GetObject(lm.GetLayoutId(lm.CurrentLayout),
                                       OpenMode.ForRead)
@@ -435,28 +338,48 @@ Namespace MyNamespace
                 Dim acPlSet As DBDictionary =
                     trans.GetObject(db.PlotSettingsDictionaryId, OpenMode.ForRead)
 
-                ' Check to see if the page setup exists
                 If acPlSet.Contains("TH_A3 PDF") = False Then CreateOrEditPageSetup()
 
                 Dim plSet As PlotSettings =
                         acPlSet.GetAt("TH_A3 PDF").GetObject(OpenMode.ForRead)
 
-                ' Update the layout
                 trans.GetObject(lm.GetLayoutId(lm.CurrentLayout), OpenMode.ForWrite)
                 acLayout.CopyFrom(plSet)
 
-                ' Save the new objects to the database
-                lm.Dispose()
-                plSet.Dispose()
-                acPlSet.Dispose()
-                acLayout.Dispose()
                 trans.Commit()
-                trans.Dispose()
             End Using
-            'End Using
 
-            ' Update the display
             doc.Editor.Regen()
+        End Sub
+
+        Public Shared Sub SwapLayoutTabOrder(layoutName1 As String, layoutName2 As String)
+            Dim doc As Document = Core.Application.DocumentManager.MdiActiveDocument
+            Dim db As Database = doc.Database
+
+            Using tr As Transaction = db.TransactionManager.StartTransaction()
+                Dim layoutDic As DBDictionary = TryCast(tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead, False), DBDictionary)
+
+                Dim layout1 As Layout = Nothing
+                Dim layout2 As Layout = Nothing
+
+                For Each entry As DBDictionaryEntry In layoutDic
+                    Dim lo As Layout = TryCast(tr.GetObject(entry.Value, OpenMode.ForRead), Layout)
+                    If lo.LayoutName = layoutName1 Then layout1 = lo
+                    If lo.LayoutName = layoutName2 Then layout2 = lo
+                Next
+
+                If layout1 IsNot Nothing AndAlso layout2 IsNot Nothing Then
+                    Dim tab1 As Integer = layout1.TabOrder
+                    Dim tab2 As Integer = layout2.TabOrder
+
+                    layout1.UpgradeOpen()
+                    layout2.UpgradeOpen()
+                    layout1.TabOrder = tab2
+                    layout2.TabOrder = tab1
+                End If
+
+                tr.Commit()
+            End Using
         End Sub
 
     End Class

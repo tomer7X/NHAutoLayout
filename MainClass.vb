@@ -39,9 +39,12 @@ Namespace MyNamespace
             Dim tbViewport As String = "VIEWMODEL"
             Dim tbInsertionPoint As Point3d = New Point3d(4.75, 4.65, 0)
             Dim cornersLayer As String = "Corners"
+            Dim TemplateBlockPath As String = Path.Combine(HostApplicationServices.Current.GetEnvironmentVariable("USER_DRIVE_PATH"), "Templates", "TH-Template.dwg")
+
+
 
             If BlocksList.Contains(blkname) = False Then
-                ReplaceBlock(blkname)
+                ReplaceBlock(blkname, TemplateBlockPath)
             End If
 
             Dim vals As TypedValue() = New TypedValue() {New TypedValue(CInt(DxfCode.Start), "INSERT")}
@@ -81,7 +84,7 @@ Namespace MyNamespace
             BlocksList = BlocksClass.GetBlockNames
 
             If BlocksList.Contains(blkname) = False Then
-                Autodesk.AutoCAD.ApplicationServices.Application.ShowAlertDialog($"File ""{blkname}.dwg"" not found.{vbLf}Aborting.")
+                Autodesk.AutoCAD.ApplicationServices.Application.ShowAlertDialog($"File ""{TemplateBlockPath}"" not found.{vbLf}Aborting.")
                 Return
             End If
 
@@ -219,7 +222,6 @@ Namespace MyNamespace
                             Dim QuantityValue As String = ""
                             Dim WidthValue As String = ""
                             Dim LengthValue As String = ""
-                            Dim quantityError As Boolean = False
 
                             For j = 0 To LayerValues.Count - 1
                                 Select Case LayerValues(j)
@@ -234,7 +236,6 @@ Namespace MyNamespace
                                         QuantityValue = StringValues(0)
                                         If QuantityValue = "" Then
                                             QuantityValue = "1"
-                                            quantityError = True
                                         End If
 
                                         StringValues.RemoveAt(0)
@@ -383,6 +384,12 @@ Namespace MyNamespace
                 End Try
             End Using
 
+            Dim layouts As List(Of String) = LayoutsClass.GetLayoutList()
+
+
+            doc.SendStringToExecute("NHReo ", True, False, False)
+            doc.SendStringToExecute("-BEDIT" & vbLf, True, False, False)
+            doc.SendStringToExecute("TH-Template" & vbLf, True, False, False)
         End Sub
 
         Public Shared Function GetCurrentMatrixBoundary(inspt As Point3d, CurrentPosition As Integer, Width As Double, Height As Double) As Point3dCollection
@@ -841,17 +848,14 @@ Namespace MyNamespace
             Convert3dto2d = New Point2d(point.X, point.Y)
         End Function
 
-        Public Shared Function ReplaceBlock(blockName As String)
+        Public Shared Function ReplaceBlock(blockName As String, blockpath As String)
             Dim doc As Document = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument
             Dim db As Database = doc.Database
-            Dim blockpath As String
             Dim ObjId As ObjectId = New ObjectId
 
-            Try
-                blockpath = HostApplicationServices.Current.FindFile(blockName & Convert.ToString(".dwg"), db, FindFileHint.[Default])
-            Catch ex As Exception
+            If Not System.IO.File.Exists(blockpath) Then
                 Return ObjectId.Null
-            End Try
+            End If
 
             Dim blkDb As Database = New Database(False, True)
             blkDb.ReadDwgFile(blockpath, System.IO.FileShare.Read, True, "")

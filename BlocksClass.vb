@@ -27,16 +27,12 @@ Namespace MyNamespace
 
         Public Shared Function InsertBlock(BlockName As String, ptPosition As Point3d, Optional inPaperSpace As Boolean = False, Optional LayoutName As String = "", Optional lname As String = "0")
             Dim doc As Document = Application.DocumentManager.MdiActiveDocument
-            Dim db As Autodesk.AutoCAD.DatabaseServices.Database
+            Dim db As Database = doc.Database
             Dim BlockID As New ObjectId
-
-            db = Application.DocumentManager.MdiActiveDocument.Database
 
             Using acLckDocCur As DocumentLock = doc.LockDocument
                 Using trans As Transaction = db.TransactionManager.StartTransaction()
-                    ' Open the Block table for read
-                    Dim acBlkTbl As BlockTable
-                    acBlkTbl = trans.GetObject(db.BlockTableId, OpenMode.ForRead)
+                    Dim acBlkTbl As BlockTable = trans.GetObject(db.BlockTableId, OpenMode.ForRead)
 
                     Dim blkRecId As ObjectId = ObjectId.Null
 
@@ -44,10 +40,8 @@ Namespace MyNamespace
                         blkRecId = acBlkTbl(BlockName)
                     Else
                         Return Nothing
-                        'Exit Function
                     End If
 
-                    ' Insert the block reference into the current space
                     If blkRecId <> ObjectId.Null Then
                         Using acBlkRef As New BlockReference(New Point3d(0, 0, 0), blkRecId)
                             With acBlkRef
@@ -61,17 +55,9 @@ Namespace MyNamespace
 
                             Dim acBlkTblRec As BlockTableRecord
 
-                            'Attempt #1
-                            'acBlkTblRec = acTrans.GetObject(acCurDb.CurrentSpaceId, OpenMode.ForWrite)
-
-                            'Attempt #2
                             If inPaperSpace Then
-                                'acBlkTblRec = acTrans.GetObject(acBlkTbl(BlockTableRecord.PaperSpace), OpenMode.ForWrite)
-
-                                'Attempt #3
                                 If LayoutName.Length = 0 Then
                                     Return Nothing
-                                    'Exit Function
                                 End If
 
                                 Dim loMgr As LayoutManager = LayoutManager.Current
@@ -85,7 +71,6 @@ Namespace MyNamespace
                             acBlkTblRec.AppendEntity(acBlkRef)
                             trans.AddNewlyCreatedDBObject(acBlkRef, True)
 
-                            'add attribute definitions
                             Dim btr As BlockTableRecord = blkRecId.GetObject(OpenMode.ForRead)
                             For Each objID As ObjectId In btr
                                 Dim obj As DBObject = objID.GetObject(OpenMode.ForRead)
@@ -103,11 +88,7 @@ Namespace MyNamespace
                         End Using
                     End If
 
-                    ' Save the new object to the database
                     trans.Commit()
-
-                    ' Dispose of the transaction
-                    'InsertBlock = True
                 End Using
             End Using
             Return BlockID
@@ -210,20 +191,13 @@ Namespace MyNamespace
 
         Public Shared Function GetPolylineInBlock(BlockName As String, lname As String) As Polyline
             Dim doc As Document = Application.DocumentManager.MdiActiveDocument
-            Dim db As Autodesk.AutoCAD.DatabaseServices.Database
+            Dim db As Database = doc.Database
             Dim returnPolyline As Polyline = Nothing
-
-            db = Application.DocumentManager.MdiActiveDocument.Database
-
-            'InsertBlock = False
 
             Using acLckDocCur As DocumentLock = doc.LockDocument
                 Try
-
                     Using trans As Transaction = db.TransactionManager.StartTransaction()
-                        ' Open the Block table for read
-                        Dim acBlkTbl As BlockTable
-                        acBlkTbl = trans.GetObject(db.BlockTableId, OpenMode.ForRead)
+                        Dim acBlkTbl As BlockTable = trans.GetObject(db.BlockTableId, OpenMode.ForRead)
 
                         Dim blkRecId As ObjectId = ObjectId.Null
 
@@ -231,28 +205,23 @@ Namespace MyNamespace
                             blkRecId = acBlkTbl(BlockName)
                         Else
                             Return Nothing
-                            'Exit Function
                         End If
 
-                        ' Insert the block reference into the current space
                         If blkRecId <> ObjectId.Null Then
                             Dim objs As DBObjectCollection = New DBObjectCollection()
                             Using acBlkRef As New BlockReference(New Point3d(0, 0, 0), blkRecId)
                                 acBlkRef.Explode(objs)
                                 For Each obj As Object In objs
-                                    Dim pl As Polyline = Nothing
-                                    pl = TryCast(obj, Polyline)
+                                    Dim pl As Polyline = TryCast(obj, Polyline)
                                     If pl IsNot Nothing AndAlso pl.Layer = lname Then
                                         returnPolyline = pl
                                         Exit For
                                     End If
                                 Next
-                                acBlkRef.Dispose()
                             End Using
                         End If
 
                         trans.Commit()
-
                     End Using
                 Catch ex As Exception
 
