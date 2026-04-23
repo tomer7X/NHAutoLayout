@@ -2,6 +2,7 @@
 Imports Autodesk.AutoCAD.DatabaseServices
 Imports Autodesk.AutoCAD.EditorInput
 Imports Autodesk.AutoCAD.Geometry
+Imports Autodesk.AutoCAD.MacroRecorder
 Imports Autodesk.AutoCAD.Runtime
 Imports System.IO
 
@@ -39,8 +40,8 @@ Namespace MyNamespace
             Dim tbViewport As String = "VIEWMODEL"
             Dim tbInsertionPoint As Point3d = New Point3d(4.75, 4.65, 0)
             Dim cornersLayer As String = "Corners"
-            Dim TemplateBlockPath As String = Path.Combine(HostApplicationServices.Current.GetEnvironmentVariable("USER_DRIVE_PATH"), "Templates", "TH-Template.dwg")
-
+            Dim EnvPath As String = HostApplicationServices.Current.GetEnvironmentVariable("USER_DRIVE_PATH")
+            Dim TemplateBlockPath As String = Path.Combine(EnvPath, "Templates", "TH-Template.dwg")
 
 
             If BlocksList.Contains(blkname) = False Then
@@ -91,7 +92,7 @@ Namespace MyNamespace
             Using trans As Transaction = doc.TransactionManager.StartTransaction()
                 Try
                     Dim writelineflag As Boolean
-                    Dim header As String = $"Page,Panel Name,Length,Width,Quantity"
+                    Dim header As String = $"Page,Panel Name,Length,Width,Quantity,,Net Length, Net Width"
                     If System.IO.File.Exists(csvFile) Then
                         If KeywordResult.StringResult = "Yes" Then
                             writelineflag = False
@@ -154,12 +155,12 @@ Namespace MyNamespace
 
                             Dim bResult As BoundaryResult = GetDataInsideBoundary(currentboundary, cornersLayer)
 
+                            '''For neto
+                            Dim TotalNetLength = NetDimensions.GetSumOfDimensionValuesInBoundaryByLayer(currentboundary, "NetLength", trans)
+                            Dim TotalNetWidth = NetDimensions.GetSumOfDimensionValuesInBoundaryByLayer(currentboundary, "NetWidth", trans)
+
                             Dim verticesInsideBoundary As List(Of Point3d) = bResult.PointsInside
 
-                            If bResult.closedError = True Then
-                                ep.errorClosed = True
-                                AppendError(ep, "not closed")
-                            End If
 
                             If verticesInsideBoundary.Count > 0 Then
                                 Dim minX As Double = verticesInsideBoundary(0).X
@@ -263,7 +264,7 @@ Namespace MyNamespace
 
                             If LengthValue = "" Then
                                 LengthValue = realLength.ToString()
-                                ep.errorWidth = True
+                                ep.errorLength = True
                                 AppendError(ep, "missing length dimension")
                             End If
                             Dim AttributeTags As List(Of String) = New List(Of String)
@@ -310,10 +311,6 @@ Namespace MyNamespace
 
                             ep.panelName = NameValue
 
-                            If bResult.moreThanOne = True Then
-                                ep.errorDuplicateCorner = True
-                                AppendError(ep, "duplicate corner")
-                            End If
 
                             epList.Add(ep)
 
@@ -349,7 +346,7 @@ Namespace MyNamespace
                             LayoutManager.Current.CurrentLayout = "Model"
                             LayoutCount += 1
 
-                            Writer.WriteLine($"{PageNumber},{NameValue},{LengthValue},{WidthValue},{QuantityValue}")
+                            Writer.WriteLine($"{PageNumber},{NameValue},{LengthValue},{WidthValue},{QuantityValue},, {TotalNetLength}, {TotalNetWidth}")
                         Next
                     Next
 
@@ -548,9 +545,6 @@ Namespace MyNamespace
                                         result.Add(vertex)
                                     End If
                                 Next
-                                If poly.Closed = False Then
-                                    bResult.closedError = True
-                                End If
                             ElseIf TypeOf ent Is Line Then
                                 lineCount += 1
                                 Dim line As Line = CType(ent, Line)
@@ -568,15 +562,7 @@ Namespace MyNamespace
                         End If
                     Next
 
-                    If IsClosedPart(lineResult) = False Then
-                        bResult.closedError = True
-                    End If
-
                     result.AddRange(lineResult)
-
-                    If polylineCount > 1 Then
-                        bResult.moreThanOne = True
-                    End If
 
                     tr.Commit()
 
@@ -877,38 +863,13 @@ Namespace MyNamespace
 
             Return ObjId
         End Function
-
-        Public Shared Function IsClosedPart(points As List(Of Point3d)) As Boolean
-            ' Dictionary to count occurrences of each point
-            Dim pointCounts As New Dictionary(Of Point3d, Integer)()
-
-            ' Count occurrences of each point
-            For Each pt As Point3d In points
-                If pointCounts.ContainsKey(pt) Then
-                    pointCounts(pt) += 1
-                Else
-                    pointCounts(pt) = 1
-                End If
-            Next
-
-            ' Check if every point appears exactly twice
-            For Each count As Integer In pointCounts.Values
-                If count <> 2 Then
-                    Return False
-                End If
-            Next
-
-            Return True
-        End Function
     End Class
 
     Public Class BoundaryResult
-        Public Property PointsInside As List(Of Point3d)
-        Public Property moreThanOne As Boolean
-        Public Property closedError As Boolean
-    End Class
+            Public Property PointsInside As List(Of Point3d)
+        End Class
 
-    Public Class ErrorList
+        Public Class ErrorList
         Public Property errorIndex As Integer
         Public Property panelName As String
         Public Property errorMissingPanelName As Boolean = False
@@ -917,7 +878,6 @@ Namespace MyNamespace
         Public Property errorWidth As Boolean = False
         Public Property errorQuantity As Boolean = False
         Public Property errorDuplicateCorner As Boolean = False
-        Public Property errorClosed As Boolean = False
         Public Property errorStrings As String
     End Class
 End Namespace
